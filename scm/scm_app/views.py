@@ -5,94 +5,17 @@ from django.http import HttpResponse
 # from .models import *
 import pandas
 from . models import ScmUser,Channel,Tenant,BU,Division,Category,Branch,SKU_SNP,Brand,Network
-from . models import Branch_SKU,Production_Plant,Production_Plant_SKU,tblForecastDtl,FC_Details,SalesOrder_Exim_SFTP,Fc_Header
+from . models import Branch_SKU,Production_Plant,Production_Plant_SKU,tblForecastDtl,FC_Details,SalesOrder,Fc_Header
 from django.db.models import Sum
 import statistics
 from datetime import datetime
-
+from .utils import mslReport
 # Create your views here.
 class getMSL(APIView):
     def get(self, *args, **kwargs):
-        sku_id = self.request.GET.get('sku_id',None)
-        allSKU = SKU_SNP.objects.filter(Id=sku_id).first()
-         
-        # FOR NOW DEFAULT VALUES FOR NLT , RP AND STP
-
-        NLT = 2
-        RP = 2
-        STP = 2
-        print("SKU_SNP DATA:  ",SKU_SNP.objects.filter(Id=sku_id).values().first())
-        print("\n\n")
-        Forecast_No = Fc_Header.objects.filter(TenantId=allSKU.TenantId,BU_Code=allSKU.BUId)
-        Forecast_No_For_print = Forecast_No.values().order_by('-FC_date').first()
-        Forecast_No = Forecast_No.order_by('-FC_date').first()
-        print("FORCAST HEADER DATA: ",Forecast_No_For_print)
-        # fc = FC_Details.objects.filter(SKUId=allSKU).first()
-        # fc.Forecast_No=Forecast_No.Forecast_No
-        # fc.BranchId=Forecast_No.BranchID
-        # fc.ChannelId=Channel.objects.filter(Id=Forecast_No.Channel_id).first()
-        # fc.save()
-        # .update(SKUId=allSKU,Forecast_No=Forecast_No.Forecast_No,BranchId=Forecast_No.BranchID,ChannelId=Forecast_No.Channel_id)
-        year = datetime.now().year
-        month = datetime.now().month
-        SKUBasedDemand = FC_Details.objects.filter(SKUId=allSKU,Forecast_No=Forecast_No.Forecast_No,BranchId=Forecast_No.BranchID,ChannelId=Forecast_No.Channel_id,).values(
-                'M1_3SC_QTY','M2_3SC_QTY','M3_3SC_QTY','M4_3SC_QTY','M5_3SC_QTY','M6_3SC_QTY','M7_3SC_QTY','M8_3SC_QTY','M9_3SC_QTY','M10_3SC_QTY','M11_3SC_QTY','M12_3SC_QTY').distinct()
-        SKUBasedDemand = SKUBasedDemand.first()
-        if SKUBasedDemand:
-            SKUBasedDemandList = list(SKUBasedDemand.values())
-        else:
-            SKUBasedDemandList = [0]
-        # SKUBasedDemand = FC_Details.objects.filter(SKUId=allSKU,Forecast_No=Forecast_No.Forecast_No,BranchId=Forecast_No.BranchID,ChannelId=Forecast_No.Channel_id).annotate(
-        #     SUM_M1_3SC_QTY = Sum('M1_3SC_QTY'),SUM_M2_3SC_QTY=Sum('M2_3SC_QTY'),SUM_M3_3SC_QTY=Sum('M3_3SC_QTY'),SUM_M4_3SC_QTY = Sum('M4_3SC_QTY'),SUM_M5_3SC_QTY = Sum('M5_3SC_QTY'),SUM_M6_3SC_QTY = Sum('M6_3SC_QTY'),SUM_M7_3SC_QTY = Sum('M7_3SC_QTY'),SUM_M8_3SC_QTY = Sum('M8_3SC_QTY'),SUM_M9_3SC_QTY=Sum('M9_3SC_QTY'),SUM_M10_3SC_QTY = Sum('M10_3SC_QTY'),SUM_M11_3SC_QTY = Sum('M11_3SC_QTY'),SUM_M12_3SC_QTY = Sum('M12_3SC_QTY')).values(
-        #         'SUM_M1_3SC_QTY','SUM_M2_3SC_QTY','SUM_M3_3SC_QTY','SUM_M4_3SC_QTY','SUM_M5_3SC_QTY','SUM_M6_3SC_QTY','SUM_M7_3SC_QTY','SUM_M8_3SC_QTY','SUM_M9_3SC_QTY','SUM_M10_3SC_QTY','SUM_M11_3SC_QTY','SUM_M12_3SC_QTY').distinct().first()
-        D = sum(SKUBasedDemandList)
-        print("DEMAND : ",D)
-        PI = NLT * D # D is demand & NLT= Net Lead Time
-        """
-        D= Qty based on historical
-        Sales / Forecast Qty
-
-        NLT= MLT(Manufacturing Lead Time) + Transport Lead time b/w WH to CDC + Transport Lead time b/w CDC to branch
-        """
-        CS = D * RP #RP= Replenishment Period
-        """
-        RP= Dispatching Freq.(days) at CDCs & WH. [ Obtained from 1 year Inbound Data – Source to customer]
-        """
-        
-        print(year,month)
-        month = 5
-        std_data = [0,0,0,0,0,0]
-        if len(SKUBasedDemandList) > 1:
-            if month > 5:
-                std_data = SKUBasedDemandList[month-6:month]
-            else:
-                std_data = SKUBasedDemandList[0:month]
-                SKUBasedDemand = FC_Details.objects.filter(SKUId=allSKU,Forecast_No=Forecast_No.Forecast_No,BranchId=Forecast_No.BranchID,ChannelId=Forecast_No.Channel_id,CreatedDate__year=year-1)
-                if SKUBasedDemand:
-                    SKUBasedDemand = SKUBasedDemand.values(
-                    'M1_3SC_QTY','M2_3SC_QTY','M3_3SC_QTY','M4_3SC_QTY','M5_3SC_QTY','M6_3SC_QTY','M7_3SC_QTY','M8_3SC_QTY','M9_3SC_QTY','M10_3SC_QTY','M11_3SC_QTY','M12_3SC_QTY').distinct().first()
-                    SKUBasedDemand = SKUBasedDemand.values()
-                    left_month = 6-month
-                    std_data = std_data+list(SKUBasedDemand)[12-left_month:12]
-                else:
-                    std_data = std_data
-            
-        print("std_data : ",std_data)
-        STD = statistics.stdev(std_data) # for STANDARD DEVIATION 
-        # STD = 10 # HAVE TO MAKE IT DYNAMIC 
-        SS = ((D**2)*(STP**2) + (RP + NLT)*(STD**2)) # multiplying by 0.5 to find square root of data
-        print("=======SS=======",SS)
-        SS = SS ** 0.5
-        print("=======SS=======",SS)
-        #FORMULA FOR MSL FINAL FORMULA
-        MSL = PI + CS + SS 
-        """
-        PI is Pipeline inventory
-        CS is  Cyclic Stock
-        SS is Safety Stock
-        """
-        
-        return Response({"MSL":MSL})
+        msl = mslReport(self.request)
+        print(msl)
+        return Response({"MSL":msl})
 
 
 class ListUsers(APIView):
